@@ -25,6 +25,12 @@ export function primaryToolArg(name: string, args: Record<string, unknown>): str
     const cmd = args.command;
     if (typeof cmd === 'string' && cmd) return cmd;
   }
+  if (name === 'http') {
+    const method = typeof args.method === 'string' && args.method ? args.method.toUpperCase() : '';
+    const url = typeof args.url === 'string' && args.url ? args.url : '';
+    if (method && url) return `${method} ${url}`;
+    if (url) return url;
+  }
   if (name === 'confirm_finding') {
     const title = typeof args.title === 'string' ? args.title : '';
     const severity = typeof args.severity === 'string' ? args.severity : '';
@@ -62,9 +68,6 @@ function formatLoadSkillResult(result: string): string | null {
   const skill = result.match(/^# Skill:\s*(.+)$/m)?.[1]?.trim();
   if (!skill) return null;
 
-  const headings = Array.from(result.matchAll(/^##\s+(.+)$/gm), (m) => m[1]?.trim()).filter(
-    Boolean,
-  );
   const title = result
     .split('\n')
     .map((line) => line.trim())
@@ -74,6 +77,5 @@ function formatLoadSkillResult(result: string): string | null {
 
   const lines = [`loaded skill: ${skill}`];
   if (title) lines.push(`playbook: ${title}`);
-  if (headings.length > 0) lines.push(`sections: ${headings.join(' · ')}`);
   return lines.join('\n');
 }

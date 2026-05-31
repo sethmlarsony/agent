@@ -97,6 +97,22 @@ describe('extractTextContent', () => {
 });
 
 describe('buildToolResultView', () => {
+  it('compacts successful shell stdout to the meaningful output', () => {
+    const v = buildToolResultView('exit: 0\nstdout:\n404 ftp.gobus.net');
+    expect(v.collapsible).toBe(false);
+    expect(stripAnsi(v.preview)).toBe('404 ftp.gobus.net');
+  });
+
+  it('keeps shell structure when exit is non-zero or stderr exists', () => {
+    const failed = buildToolResultView('exit: 1\nstdout:\nnope');
+    expect(stripAnsi(failed.preview)).toContain('exit: 1');
+    expect(stripAnsi(failed.preview)).toContain('stdout:\nnope');
+
+    const warned = buildToolResultView('exit: 0\nstdout:\nok\nstderr:\nwarning');
+    expect(stripAnsi(warned.preview)).toContain('exit: 0');
+    expect(stripAnsi(warned.preview)).toContain('stderr:\nwarning');
+  });
+
   it('does not collapse short output', () => {
     const v = buildToolResultView('a\nb\nc');
     expect(v.collapsible).toBe(false);

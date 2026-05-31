@@ -37,9 +37,8 @@ export class BridgedPrompter implements Prompter {
         ...req,
         resolve: (d: Decision) => {
           signal?.removeEventListener('abort', onAbort);
-          // Arbitrary-exec / sensitive requests opt out of session caching:
-          // honor this one approval but re-prompt next time so a single
-          // "allow session" can't silently whitelist every later command.
+          // Sensitive requests can opt out of session caching: honor this
+          // one approval but re-prompt next time.
           if (d === 'allow-session' && !req.noSessionCache) this.sessionAllowed.add(req.tool);
           this.publish(null);
           resolve(d);

@@ -28,6 +28,13 @@ describe('primaryToolArg', () => {
     expect(primaryToolArg('bash', { command: 'ls -la' })).toBe('ls -la');
     expect(primaryToolArg('BashTool', { command: 'whoami' })).toBe('whoami');
   });
+  it('formats http requests as METHOD URL', () => {
+    expect(primaryToolArg('http', { method: 'GET', url: 'https://gobus.net' })).toBe(
+      'GET https://gobus.net',
+    );
+    expect(primaryToolArg('http', { method: 'post', url: '/api/login' })).toBe('POST /api/login');
+    expect(primaryToolArg('http', { url: 'https://gobus.net' })).toBe('https://gobus.net');
+  });
   it('formats confirm_finding as (severity) title, or title alone', () => {
     expect(primaryToolArg('confirm_finding', { severity: 'high', title: 'XSS' })).toBe(
       '(high) XSS',
@@ -38,7 +45,7 @@ describe('primaryToolArg', () => {
     expect(primaryToolArg('load_skill', { name: 'webvuln' })).toBe('webvuln');
   });
   it('returns null for unknown tools or missing/empty fields', () => {
-    expect(primaryToolArg('http', { url: 'x' })).toBeNull();
+    expect(primaryToolArg('http', {})).toBeNull();
     expect(primaryToolArg('shell', {})).toBeNull();
     expect(primaryToolArg('mcp_browser_browser_navigate', { url: '' })).toBeNull();
     expect(primaryToolArg('confirm_finding', {})).toBeNull();
@@ -69,11 +76,7 @@ describe('formatToolResult', () => {
       '## 2. Known-CVE pass',
     ].join('\n');
     expect(formatToolResult('load_skill', skillBody)).toBe(
-      [
-        'loaded skill: webvuln',
-        'playbook: Web vuln hunting playbook',
-        'sections: 1. Triage the target · 2. Known-CVE pass',
-      ].join('\n'),
+      ['loaded skill: webvuln', 'playbook: Web vuln hunting playbook'].join('\n'),
     );
   });
   it('falls back (null) for other tools or malformed JSON', () => {

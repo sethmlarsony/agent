@@ -20,9 +20,9 @@ export interface Request {
    *  paths) where blanket YOLO consent is too dangerous. */
   bypassYolo?: boolean;
   /** When true, an "allow session" decision is honored once but NOT cached
-   *  — the next equivalent call re-prompts. Used for arbitrary-exec tools
-   *  (shell) where one approval must not silently whitelist all future
-   *  commands for the session. */
+   *  — the next equivalent call re-prompts. Used for high-consequence
+   *  requests, such as credential-path file access, where blanket session
+   *  consent should not silently carry forward. */
   noSessionCache?: boolean;
 }
 

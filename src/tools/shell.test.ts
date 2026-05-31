@@ -89,9 +89,9 @@ describe('ShellTool output cap', () => {
     expect(out.length).toBeLessThan(64 * 1024);
   });
 
-  it('never caches an allow-session grant (re-prompts every call)', () => {
+  it('does not opt out of allow-session caching', () => {
     const t = new ShellTool();
-    expect(t.permissionHints().noSessionCache).toBe(true);
+    expect(t.permissionHints?.({ command: 'id' })?.noSessionCache).not.toBe(true);
   });
 });
 

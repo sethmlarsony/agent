@@ -20,11 +20,12 @@ Before running anything, restate the apex domain and ask the user to confirm it 
 Pull from public CT logs — no extra tooling required. Note: `crt.sh` is flaky and frequently answers with a `502`/HTML page or an empty body instead of JSON. Piping that straight into `jq` is what throws `jq: parse error: Invalid numeric literal`. Validate the body is JSON before parsing, and retry with backoff:
 
 ```
-# Robust crt.sh pull — only parses when the response is valid JSON.
+# Robust crt.sh pull — quiet retries, parse only valid JSON.
+: > subs.txt
 for attempt in 1 2 3; do
   resp=$(curl -fsS --max-time 30 -H 'Accept: application/json' \
-    "https://crt.sh/?q=%25.<APEX>&output=json" 2>/dev/null)
-  if printf '%s' "$resp" | jq -e . >/dev/null 2>&1; then
+    "https://crt.sh/?q=%25.<APEX>&output=json" 2>/dev/null || true)
+  if printf '%s' "$resp" | jq -e 'type == "array"' >/dev/null 2>&1; then
     printf '%s' "$resp" \
       | jq -r '.[].name_value' \
       | sed 's/^\*\.//' \
@@ -34,7 +35,7 @@ for attempt in 1 2 3; do
   fi
   sleep 3   # crt.sh is rate-limited / returns 502 under load
 done
-[ -s subs.txt ] || echo "crt.sh returned no JSON (502/empty) — retry later or use another source"
+[ -s subs.txt ] || printf 'warning: crt.sh unavailable or returned non-JSON; try OTX or another source\n' >&2
 ```
 
 `name_value` is newline-separated and may include wildcard (`*.`) entries; the `sed`/`sort -u` above normalizes and dedupes them. If `<APEX>` is pinned via `/target`, substitute the real apex.

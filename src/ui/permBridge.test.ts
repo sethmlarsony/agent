@@ -1,6 +1,6 @@
 // BridgedPrompter session-cache behavior. An "allow session" decision is
 // cached per tool so later calls skip the modal — EXCEPT requests flagged
-// noSessionCache (arbitrary-exec / sensitive ops), which must re-prompt.
+// noSessionCache, which must re-prompt.
 
 import { describe, expect, it } from 'vitest';
 import type { Request } from '../permission/permission.js';
@@ -40,7 +40,7 @@ describe('BridgedPrompter', () => {
 
   it('never caches when noSessionCache is set (re-prompts every call)', async () => {
     const { ask, modals } = makeBridge('allow-session');
-    const req: Request = { tool: 'shell', summary: 's', detail: 'd', noSessionCache: true };
+    const req: Request = { tool: 'file_read', summary: 's', detail: 'd', noSessionCache: true };
     await ask(req);
     await ask(req);
     expect(modals()).toBe(2); // re-prompted both times

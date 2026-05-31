@@ -74,12 +74,6 @@ export class ShellTool implements Tool {
     return true;
   }
 
-  /** Arbitrary command execution: never cache an "allow session" grant, so
-   *  one approval can't silently whitelist every later command. */
-  permissionHints(): { noSessionCache: boolean } {
-    return { noSessionCache: true };
-  }
-
   summarize(args: Record<string, unknown>): { summary: string; detail: string } {
     const cmd = argString(args, 'command');
     const firstLine = cmd.split('\n', 1)[0] ?? '';

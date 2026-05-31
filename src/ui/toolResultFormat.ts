@@ -13,6 +13,13 @@ const EXIT_RE = /^exit:\s*(-?\d+|timeout[^\n]*)/;
 const STDOUT_LABEL = 'stdout:';
 const STDERR_LABEL = 'stderr:';
 
+interface ShellResultParts {
+  exit: string;
+  stdout: string;
+  stderr: string;
+  rest: string;
+}
+
 /**
  * Return `body` styled for the transcript. Recognises the shape that
  * ShellTool / BashTool produce:
@@ -67,6 +74,49 @@ export function colorizeShellResult(body: string): string {
  */
 export function looksLikeShellResult(body: string): boolean {
   return EXIT_RE.test(body) || body.startsWith(STDOUT_LABEL) || body.includes('\nstdout:');
+}
+
+function parseShellResult(body: string): ShellResultParts | null {
+  const lines = body.split('\n');
+  const first = lines[0] ?? '';
+  const exitMatch = first.match(EXIT_RE);
+  if (!exitMatch) return null;
+
+  const stdoutIdx = lines.indexOf(STDOUT_LABEL, 1);
+  if (stdoutIdx === -1) return null;
+
+  const stderrIdx = lines.indexOf(STDERR_LABEL, stdoutIdx + 1);
+  const stdoutLines =
+    stderrIdx === -1 ? lines.slice(stdoutIdx + 1) : lines.slice(stdoutIdx + 1, stderrIdx);
+  const stderrLines = stderrIdx === -1 ? [] : lines.slice(stderrIdx + 1);
+
+  return {
+    exit: exitMatch[1] ?? '',
+    stdout: trimTrailingBlankLines(stdoutLines).join('\n'),
+    stderr: trimTrailingBlankLines(stderrLines).join('\n'),
+    rest: lines.slice(1, stdoutIdx).join('\n'),
+  };
+}
+
+function trimTrailingBlankLines(lines: string[]): string[] {
+  const out = [...lines];
+  while (out.length > 0 && out[out.length - 1] === '') out.pop();
+  return out;
+}
+
+function compactShellResultForTranscript(body: string): string {
+  const parsed = parseShellResult(body);
+  if (
+    !parsed ||
+    parsed.exit !== '0' ||
+    parsed.stderr ||
+    parsed.rest ||
+    !parsed.stdout ||
+    parsed.stdout.includes('\n[... truncated ')
+  ) {
+    return body;
+  }
+  return parsed.stdout;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +186,7 @@ function formatBytes(n: number): string {
  * both views. Short results return `collapsible: false` with preview === full.
  */
 export function buildToolResultView(raw: string): ToolResultView {
-  const content = extractTextContent(raw);
+  const content = compactShellResultForTranscript(extractTextContent(raw));
   const colorize = (s: string): string =>
     looksLikeShellResult(content) ? colorizeShellResult(s) : s;
 
