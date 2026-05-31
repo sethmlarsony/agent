@@ -178,6 +178,7 @@ pentesterflow --dangerously-skip-permissions
 | `/skills [enable\|disable\|new <name>]` | Manage skills or scaffold a new skill. |
 | `/maxsteps <n>` | Set the per-turn tool-call cap. |
 | `/thinking on\|off` | Toggle visible reasoning guidance. |
+| `/update [version]` | Fetch the GitHub release installer and install the latest or pinned version. |
 | `/yolo [on\|off]` | Toggle auto-approval mode. |
 | `/reset` | Clear conversation and saved session state. |
 | `/clear` | Clear only the on-screen transcript. |

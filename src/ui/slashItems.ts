@@ -28,6 +28,7 @@ export const SLASH_ITEMS: SlashItem[] = [
   },
   { name: '/maxsteps', args: '<n>', description: 'per-turn tool-call cap (default 20)' },
   { name: '/thinking', args: 'on|off', description: 'toggle the show-thinking system directive' },
+  { name: '/update', args: '[version]', description: 'fetch GitHub release updates and install' },
   { name: '/yolo', args: '[on|off]', description: 'toggle auto-approve for every tool call' },
   { name: '/exit', description: 'quit pentesterflow' },
 ];

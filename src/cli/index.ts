@@ -700,7 +700,7 @@ Flags:
   --version / --help
 
 In the TUI: Enter send · Esc cancel turn · Ctrl-C quit · mouse-wheel scroll
-Slash: /help /clear /reset /exit /target /maxsteps /thinking
+Slash: /help /clear /reset /exit /target /maxsteps /thinking /update
 `);
 }
 

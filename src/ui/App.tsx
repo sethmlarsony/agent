@@ -13,6 +13,7 @@ import { findActiveMention, listMentionDir, parseMentionPath } from '../agent/me
 import type { Backend } from '../config/config.js';
 import { listModels } from '../llm/models.js';
 import { renderSkillTemplate } from '../skills/template.js';
+import { runSelfUpdate } from '../update/selfUpdate.js';
 import { AskModal } from './AskModal.js';
 import type { BannerData } from './Banner.js';
 import { Input } from './Input.js';
@@ -796,6 +797,36 @@ function handleSlash(
       }
       void agent.setThinkingEnabled(v === 'on');
       dispatch({ type: 'append', entry: { kind: 'system', text: `thinking ${v}` } });
+      return true;
+    }
+    case '/update': {
+      const version = rest.join(' ').trim() || 'latest';
+      dispatch({
+        type: 'append',
+        entry: {
+          kind: 'system',
+          text: `checking GitHub release updates (${version})…`,
+        },
+      });
+      void runSelfUpdate(version)
+        .then((result) => {
+          dispatch({
+            type: 'append',
+            entry: {
+              kind: 'system',
+              text:
+                `update installed (${result.version})` +
+                `${result.installDir ? ` → ${result.installDir}` : ''}` +
+                `${result.output ? `\n${result.output}` : ''}`,
+            },
+          });
+        })
+        .catch((err: unknown) => {
+          dispatch({
+            type: 'append',
+            entry: { kind: 'error', text: `/update: ${(err as Error).message}` },
+          });
+        });
       return true;
     }
     case '/skills': {

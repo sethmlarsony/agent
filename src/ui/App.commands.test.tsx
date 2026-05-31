@@ -12,9 +12,18 @@ import { AlwaysAllow } from '../permission/permission.js';
 import { newRegistry } from '../skills/registry.js';
 import { Target } from '../target/target.js';
 import { Registry as ToolRegistry } from '../tools/registry.js';
+import { runSelfUpdate } from '../update/selfUpdate.js';
 import { App, type AppProps } from './App.js';
 import type { BannerData } from './Banner.js';
 import { TerminalSizeProvider } from './TerminalSize.js';
+
+vi.mock('../update/selfUpdate.js', () => ({
+  runSelfUpdate: vi.fn(async () => ({
+    version: 'latest',
+    installDir: '/tmp/bin',
+    output: 'installed pentesterflow',
+  })),
+}));
 
 const stubClient: Client = {
   name: () => 'stub',
@@ -146,6 +155,16 @@ describe('UI slash commands (terminal integration)', () => {
     // clearScreen() writes \x1b[2J\x1b[3J\x1b[H to stdout.
     const allOutput = mounted.stdout.frames.join('');
     expect(allOutput).toContain('\x1b[2J');
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it('/update runs the GitHub updater and is not sent to the agent', async () => {
+    mounted = renderApp();
+    await tick();
+    await submit(mounted.stdin, '/update v0.1.0');
+    await tick();
+    expect(runSelfUpdate).toHaveBeenCalledWith('v0.1.0');
+    expect(mounted.lastFrame()).toContain('update installed');
     expect(runSpy).not.toHaveBeenCalled();
   });
 });
