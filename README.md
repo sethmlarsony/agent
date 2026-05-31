@@ -1,6 +1,6 @@
 <div align="center">
 
-# Pentesterflow
+<img src="assets/logo.png" alt="PentesterFlow" width="520" />
 
 ### Agentic offensive-security in your terminal — powered by your own local LLMs.
 
