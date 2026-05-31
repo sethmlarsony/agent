@@ -24,7 +24,7 @@ describe('state.reducer tool-call preview', () => {
     expect(last?.kind).toBe('tool-call');
     expect(last?.text).not.toContain('\n');
     expect(last?.text).not.toContain('\\n');
-    expect(last?.text).toContain('shell');
+    expect(last?.text).toContain('Shell(');
     expect(last?.text).toContain('python3');
   });
 
@@ -43,7 +43,7 @@ describe('state.reducer tool-call preview', () => {
     const last = out.transcript[out.transcript.length - 1];
     // "shell " (6) + 120 + "…" (1) = 127 total. Loose check on the cap.
     expect(last?.text.length).toBeLessThanOrEqual(140);
-    expect(last?.text).toMatch(/…$/);
+    expect(last?.text).toMatch(/…\)$/);
   });
 
   it('shows the bare command, not the JSON envelope', () => {
@@ -58,8 +58,25 @@ describe('state.reducer tool-call preview', () => {
       },
     });
     const last = out.transcript.at(-1);
-    expect(last?.text).toBe('shell curl -ksS https://example.com');
+    expect(last?.text).toBe('Shell(curl -ksS https://example.com)');
+    expect(last?.prefix).toBe('⏺ ');
     expect(last?.text).not.toContain('{"command"');
+  });
+
+  it('renders BashTool calls in compact Bash(command) style', () => {
+    const out = reducer(seed(), {
+      type: 'agent-event',
+      event: {
+        type: 'tool-call',
+        id: 'c1',
+        name: 'BashTool',
+        args: {},
+        argsJSON: '{"command":"mkdir -p recon/gobus.net"}',
+      },
+    });
+    const last = out.transcript.at(-1);
+    expect(last?.text).toBe('Bash(mkdir -p recon/gobus.net)');
+    expect(last?.prefix).toBe('⏺ ');
   });
 
   it('strips raw control chars from the preview', () => {
@@ -114,7 +131,25 @@ describe('state.reducer clear', () => {
 });
 
 describe('state.reducer tool-result body', () => {
-  it('keeps newlines so Transcript can window line-by-line', () => {
+  it('renders successful empty BashTool output as Done', () => {
+    const out = reducer(seed(), {
+      type: 'agent-event',
+      event: {
+        type: 'tool-result',
+        id: 'c1',
+        name: 'BashTool',
+        result: 'exit: 0\nstdout:\n',
+        err: '',
+        durationMs: 12,
+      },
+    });
+    const last = out.transcript.at(-1);
+    expect(last?.kind).toBe('tool-result');
+    expect(last?.text).toBe('Done');
+    expect(last?.prefix).toBe('  ⎿ ');
+  });
+
+  it('keeps successful shell stdout compact', () => {
     const out = reducer(seed(), {
       type: 'agent-event',
       event: {
@@ -127,15 +162,7 @@ describe('state.reducer tool-result body', () => {
       },
     });
     const last = out.transcript[out.transcript.length - 1];
-    expect(last?.text.split('\n').length).toBeGreaterThanOrEqual(3);
-    // The shell-result colorizer wraps tokens in ANSI; strip them
-    // before content asserts so this test stays focused on text shape
-    // rather than styling (which has its own dedicated test file).
-    const ESC = String.fromCharCode(0x1b);
-    const plain = (last?.text ?? '').replace(new RegExp(`${ESC}\\[[0-9;]*m`, 'g'), '');
-    expect(plain).toContain('[ok]');
-    expect(plain).toContain('exit: 0');
-    expect(plain).toContain('101');
+    expect(last?.text).toBe('[ok] shell (12ms)\n101');
   });
 });
 

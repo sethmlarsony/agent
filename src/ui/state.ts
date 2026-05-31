@@ -23,6 +23,8 @@ export interface TranscriptEntry {
   fullText?: string;
   /** Set once the full body has been reprinted so Ctrl-O won't duplicate it. */
   expanded?: boolean;
+  /** Optional display prefix override for entries with custom transcript chrome. */
+  prefix?: string;
 }
 
 export interface AppState {
@@ -186,6 +188,25 @@ function previewToolArgs(name: string, raw: string): string {
   return previewArgs(raw);
 }
 
+function isShellTool(name: string): boolean {
+  return name === 'shell' || name === 'bash' || name === 'BashTool';
+}
+
+function shellDisplayName(name: string): string {
+  return name === 'shell' ? 'Shell' : 'Bash';
+}
+
+function formatToolCallText(name: string, argsJSON: string): string {
+  const argsPreview = previewToolArgs(name, argsJSON);
+  if (isShellTool(name)) return `${shellDisplayName(name)}(${argsPreview})`;
+  return `${displayToolName(name)} ${argsPreview}`;
+}
+
+function isSuccessfulEmptyShellResult(result: string): boolean {
+  const plain = result.replace(/\r\n/g, '\n').trimEnd();
+  return plain === 'exit: 0\nstdout:';
+}
+
 function applyAgentEvent(state: AppState, ev: AgentEvent): AppState {
   switch (ev.type) {
     case 'assistant-text': {
@@ -209,11 +230,19 @@ function applyAgentEvent(state: AppState, ev: AgentEvent): AppState {
           ...state.transcript,
           {
             kind: 'tool-call',
-            text: `${displayToolName(ev.name)} ${previewToolArgs(ev.name, ev.argsJSON)}`,
+            text: formatToolCallText(ev.name, ev.argsJSON),
+            prefix: isShellTool(ev.name) ? '⏺ ' : undefined,
           },
         ],
       };
     case 'tool-result': {
+      if (!ev.err && isShellTool(ev.name) && isSuccessfulEmptyShellResult(ev.result)) {
+        return {
+          ...state,
+          transcript: [...state.transcript, { kind: 'tool-result', text: 'Done', prefix: '  ⎿ ' }],
+        };
+      }
+
       const prefix = ev.err
         ? `[error] ${displayToolName(ev.name)}: ${ev.err}`
         : `[ok] ${displayToolName(ev.name)} (${ev.durationMs}ms)`;

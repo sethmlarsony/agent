@@ -103,7 +103,7 @@ export function EntryView({ entry }: { entry: TranscriptEntry }): JSX.Element {
   return (
     <Box flexDirection="column">
       {rows.map((row, j) => {
-        const indent = row.isFirst ? s.prefix : CONTINUATION_INDENT;
+        const indent = row.isFirst ? (entry.prefix ?? s.prefix) : CONTINUATION_INDENT;
         // For markdown-rendered rows the embedded ANSI sets its own colors;
         // we still set the base color so plain segments render in the
         // role's color.
