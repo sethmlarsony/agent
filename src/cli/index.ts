@@ -11,15 +11,21 @@ import { homedir } from 'node:os';
 import { render } from 'ink';
 import React from 'react';
 import { Agent } from '../agent/agent.js';
+import type { PromptProfile } from '../agent/systemPrompt.js';
 import { type IngestServerHandle, startIngestServer } from '../browser/server.js';
 import { CaptureStore } from '../browser/store.js';
 import * as config from '../config/config.js';
 import { CoverageStore } from '../coverage/store.js';
-import { type Finding, Store as FindingsStore } from '../findings/store.js';
+import { findingRequestForBurp } from '../findings/httpRequest.js';
+import { Store as FindingsStore } from '../findings/store.js';
 import * as llmFactory from '../llm/factory.js';
 import { modelReliabilityWarning } from '../llm/modelWarnings.js';
 import { detectOllamaContextWindow, probeToolSupport } from '../llm/probe.js';
-import { KIMI_DEFAULT_BASE_URL } from '../llm/providers.js';
+import {
+  GEMINI_DEFAULT_BASE_URL,
+  GROQ_DEFAULT_BASE_URL,
+  KIMI_DEFAULT_BASE_URL,
+} from '../llm/providers.js';
 import * as logger from '../logger/logger.js';
 import { createSessionDebugLog } from '../logger/sessionDebug.js';
 import { YoloPrompter } from '../permission/permission.js';
@@ -57,6 +63,8 @@ import { TerminalSizeProvider } from '../ui/TerminalSize.js';
 import { BridgedAskPrompter } from '../ui/askBridge.js';
 import { BridgedPrompter } from '../ui/permBridge.js';
 import { VERSION, describe } from '../version/version.js';
+
+const GROQ_AUTO_COMPACT_THRESHOLD = 5500;
 
 interface ParsedFlags {
   showVersion: boolean;
@@ -213,6 +221,12 @@ async function main(): Promise<number> {
   if (flags.skillsDirs.length) cfg.skills_dirs = [...cfg.skills_dirs, ...flags.skillsDirs];
   if (cfg.backend === 'kimi' && !cfg.api_key) {
     cfg.api_key = process.env.MOONSHOT_API_KEY || process.env.KIMI_API_KEY || '';
+  }
+  if (cfg.backend === 'groq' && !cfg.api_key) {
+    cfg.api_key = process.env.GROQ_API_KEY || '';
+  }
+  if (cfg.backend === 'gemini' && !cfg.api_key) {
+    cfg.api_key = process.env.GEMINI_API_KEY || '';
   }
 
   // Browser MCP is opt-in PER SESSION via --browser, and never persisted:
@@ -465,8 +479,9 @@ async function main(): Promise<number> {
     target,
     thinkingEnabled: cfg.thinking_enabled,
     maxSteps: cfg.max_steps > 0 ? cfg.max_steps : undefined,
-    autoCompactThreshold: cfg.auto_compact_threshold,
+    autoCompactThreshold: effectiveAutoCompactThreshold(cfg),
     toolingProfile: cfg.tooling_profile,
+    promptProfile: effectivePromptProfile(cfg),
     // --no-stream takes precedence over the config default so users can
     // toggle off streaming for a single launch without rewriting config.
     streamingEnabled: flags.noStream ? false : cfg.streaming_enabled,
@@ -644,6 +659,8 @@ async function main(): Promise<number> {
           if (change.apiKey !== undefined) cfg.api_key = change.apiKey;
           const next = llmFactory.newFromConfig(cfg);
           agent.setClient(next);
+          agent.setAutoCompactThreshold(effectiveAutoCompactThreshold(cfg));
+          agent.setPromptProfile(effectivePromptProfile(cfg));
           await config.save(cfg);
           // New client → re-probe so the banner pill reflects the new
           // model's capabilities, not the old one's.
@@ -697,13 +714,19 @@ function providerLabel(b: string): string {
       return 'OpenAI-compatible';
     case 'kimi':
       return 'Kimi';
+    case 'groq':
+      return 'Groq';
+    case 'gemini':
+      return 'Gemini';
     default:
       return b;
   }
 }
 
 function localityFor(b: string): string {
-  return b === 'openai-compat' || b === 'kimi' ? 'remote' : 'local';
+  return b === 'openai-compat' || b === 'kimi' || b === 'groq' || b === 'gemini'
+    ? 'remote'
+    : 'local';
 }
 
 function defaultEndpoint(b: string): string {
@@ -715,9 +738,23 @@ function defaultEndpoint(b: string): string {
       return 'http://localhost:1234/v1';
     case 'kimi':
       return KIMI_DEFAULT_BASE_URL;
+    case 'groq':
+      return GROQ_DEFAULT_BASE_URL;
+    case 'gemini':
+      return GEMINI_DEFAULT_BASE_URL;
     default:
       return '';
   }
+}
+
+function effectiveAutoCompactThreshold(cfg: config.Config): number {
+  if (cfg.backend !== 'groq') return cfg.auto_compact_threshold;
+  if (cfg.auto_compact_threshold <= 0) return GROQ_AUTO_COMPACT_THRESHOLD;
+  return Math.min(cfg.auto_compact_threshold, GROQ_AUTO_COMPACT_THRESHOLD);
+}
+
+function effectivePromptProfile(cfg: config.Config): PromptProfile {
+  return cfg.backend === 'groq' || cfg.backend === 'gemini' ? 'compact' : 'full';
 }
 
 function prettyCwd(): string {
@@ -725,18 +762,6 @@ function prettyCwd(): string {
   const home = homedir();
   if (home && cwd.startsWith(home)) return `~${cwd.slice(home.length)}`;
   return cwd;
-}
-
-function findingRequestForBurp(finding: Finding): string {
-  let url: URL;
-  try {
-    url = new URL(finding.url);
-  } catch {
-    return `${finding.method || 'GET'} / HTTP/1.1\r\nHost: localhost\r\n\r\n`;
-  }
-  const method = finding.method || 'GET';
-  const path = `${url.pathname || '/'}${url.search}`;
-  return `${method} ${path} HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: PentesterFlow\r\n\r\n`;
 }
 
 /**
@@ -774,7 +799,7 @@ Usage:
   pentesterflow [flags]
 
 Flags:
-  --backend ollama|lmstudio|openai-compat|kimi
+  --backend ollama|lmstudio|openai-compat|kimi|groq|gemini
   --model <id>
   --base-url <url>
   --api-key <key>

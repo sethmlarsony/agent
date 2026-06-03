@@ -65,7 +65,7 @@ step is visible, reproducible, and easy to audit.
 | Area | What PentesterFlow provides |
 |---|---|
 | Agent loop | Plan, act, observe, verify, and report across one scoped task. |
-| Model backends | Ollama, LM Studio, Kimi API, and OpenAI-compatible APIs. |
+| Model backends | Ollama, LM Studio, Kimi API, Groq, Gemini API, and OpenAI-compatible APIs. |
 | Tooling | Shell/Bash, HTTP, file tools, search, browser capture, MCP, and finding confirmation. |
 | Skills | Markdown playbooks for recon, web vulnerabilities, SSRF, SSTI, JWT, GraphQL, race testing, takeover checks, Supabase, and deserialization. |
 | Human control | Permission prompts with allow once, allow session, deny, and explicit YOLO mode for labs. |
@@ -76,6 +76,8 @@ step is visible, reproducible, and easy to audit.
 
 - **Local by default**: run against your own model backend with no required cloud account.
 - **Hosted when needed**: switch directly to Kimi API or any OpenAI-compatible endpoint.
+- **Fast hosted models**: use Groq's OpenAI-compatible Chat API directly from `/provider`.
+- **Gemini support**: use Gemini's native API with tested PentesterFlow-fit models and cheap-cost tags in `/provider`.
 - **Modern terminal UI**: compact tool calls, readable shell transcripts, skill summaries, and finding-focused output.
 - **Permission-aware execution**: approve each risky action once or for the session.
 - **Decision planner**: each normal turn gets lightweight skill selection, risk labeling, and coverage guidance before tool use.
@@ -145,6 +147,12 @@ pentesterflow --backend openai-compat \
 # Kimi API
 MOONSHOT_API_KEY=sk-... pentesterflow --backend kimi --model kimi-k2.6
 
+# Groq API
+GROQ_API_KEY=gsk_... pentesterflow --backend groq --model openai/gpt-oss-20b
+
+# Gemini API
+GEMINI_API_KEY=AIza... pentesterflow --backend gemini --model models/gemini-3.5-flash
+
 # Enable browser-capture tools for this session
 pentesterflow --browser
 
@@ -158,13 +166,18 @@ npm run dev -- --burp 9999
 pentesterflow --dangerously-skip-permissions
 ```
 
+Groq on-demand accounts can have lower tokens-per-minute limits than the model
+context window. PentesterFlow uses a compact system prompt plus a lower
+auto-compaction threshold for Groq sessions so requests stay below Groq's TPM
+limit more reliably during long assessments.
+
 ### Command-Line Flags
 
 | Flag | Description |
 |---|---|
-| `--backend ollama\|lmstudio\|kimi\|openai-compat` | Select the LLM backend. |
+| `--backend ollama\|lmstudio\|kimi\|groq\|gemini\|openai-compat` | Select the LLM backend. |
 | `--model <id>` | Set the model id. |
-| `--base-url <url>` / `--api-key <key>` | Configure Kimi or another OpenAI-compatible backend. |
+| `--base-url <url>` / `--api-key <key>` | Configure Kimi, Groq, Gemini, or another OpenAI-compatible backend. |
 | `--skills <dirs>` | Load extra skill directories. |
 | `--resume <session-id>` | Resume a saved session. |
 | `--browser` | Enable Browser MCP tools for the current session. |

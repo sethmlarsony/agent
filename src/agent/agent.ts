@@ -20,7 +20,7 @@ import type { AgentEvent } from './events.js';
 import { MaxStepsError } from './events.js';
 import { expandFileMentions } from './mentions.js';
 import { stripThinkingTags } from './sanitize.js';
-import { type ToolingProfile, buildSystemPrompt } from './systemPrompt.js';
+import { type PromptProfile, type ToolingProfile, buildSystemPrompt } from './systemPrompt.js';
 
 export type EventSink = (e: AgentEvent) => void;
 
@@ -45,6 +45,8 @@ export interface AgentOptions {
   /** First-run picker choice. 'minimal' (default) keeps the curl-first
    *  ban on scanners; 'full' authorises ffuf/nuclei/sqlmap/etc. */
   toolingProfile?: ToolingProfile;
+  /** Compact prompt profile for providers with small request/TPM caps. */
+  promptProfile?: PromptProfile;
   /** When false, the agent calls `client.chat()` instead of
    *  `chatStream()`. Useful for backends/models where streaming is
    *  flaky (e.g. tool calls vanish from SSE deltas). Default: true. */
@@ -55,6 +57,7 @@ export interface AgentOptions {
  *  giving up for the rest of the session. A circuit-breaker: if compaction itself is broken, we don't
  *  want to retry it on every turn. */
 const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3;
+const COMPACTION_INPUT_CHAR_LIMIT = 22_000;
 const COMPACTION_SYSTEM_PROMPT =
   'Create a compact continuation memory for the same pentesting/coding session. Use concise Markdown with exactly these headings: Current objective, Target and scope, Decisions and assumptions, Tested surface, Findings and evidence, Files and commands, Credentials and placeholders, Open TODOs, Next best actions. Preserve exact endpoints, params, IDs, files, commands, tool results that matter, confirmed negatives, and reproduction evidence. Redact secrets but keep stable placeholders. Omit chatter and failed dead ends unless they prevent repeat work.';
 
@@ -74,6 +77,7 @@ export class Agent {
   private autoCompactThreshold: number;
   private consecutiveCompactFailures = 0;
   private toolingProfile: ToolingProfile;
+  private promptProfile: PromptProfile;
   private streamingEnabled: boolean;
   // True while run() or compact() is mid-execution. Used to refuse a
   // client swap mid-turn — otherwise the in-flight chat continues against
@@ -96,12 +100,14 @@ export class Agent {
     this.maxSteps = opts.maxSteps && opts.maxSteps > 0 ? opts.maxSteps : 20;
     this.autoCompactThreshold = opts.autoCompactThreshold ?? 16000;
     this.toolingProfile = opts.toolingProfile ?? 'minimal';
+    this.promptProfile = opts.promptProfile ?? 'full';
     this.streamingEnabled = opts.streamingEnabled ?? true;
     this.sysPrompt = buildSystemPrompt({
       skills: this.skills,
       thinkingEnabled: this.thinking,
       target: this.target,
       toolingProfile: this.toolingProfile,
+      promptProfile: this.promptProfile,
     });
     this.history = [{ role: 'system', content: this.sysPrompt }];
   }
@@ -194,6 +200,13 @@ export class Agent {
   /** Set the auto-compact threshold (in approxTokens). 0 disables. */
   setAutoCompactThreshold(n: number): void {
     this.autoCompactThreshold = Math.max(0, Math.floor(n));
+  }
+
+  setPromptProfile(profile: PromptProfile): void {
+    if (this.promptProfile === profile) return;
+    this.promptProfile = profile;
+    this.rebuildSystemPrompt();
+    this.history = ensureSystemPrompt(this.history, this.sysPrompt);
   }
 
   thinkingIsEnabled(): boolean {
@@ -449,7 +462,7 @@ export class Agent {
           },
           {
             role: 'user',
-            content: formatHistoryForCompaction(historySnap.slice(1)),
+            content: boundedHistoryForCompaction(historySnap.slice(1)),
           },
         ],
       };
@@ -738,7 +751,7 @@ export class Agent {
         },
         {
           role: 'user',
-          content: formatHistoryForCompaction(historySnap.slice(1)),
+          content: boundedHistoryForCompaction(historySnap.slice(1)),
         },
       ],
     };
@@ -765,6 +778,7 @@ export class Agent {
       thinkingEnabled: this.thinking,
       target: this.target,
       toolingProfile: this.toolingProfile,
+      promptProfile: this.promptProfile,
     });
   }
 
@@ -923,6 +937,18 @@ function formatHistoryForCompaction(messages: Message[]): string {
     }
   }
   return lines.join('\n');
+}
+
+function boundedHistoryForCompaction(messages: Message[]): string {
+  const full = formatHistoryForCompaction(messages);
+  if (full.length <= COMPACTION_INPUT_CHAR_LIMIT) return full;
+  const tail = full.slice(-COMPACTION_INPUT_CHAR_LIMIT);
+  const boundary = tail.indexOf('\n[');
+  const trimmed = boundary > 0 ? tail.slice(boundary) : tail;
+  return [
+    `[system]\nOlder conversation text was omitted because the compaction input exceeded ${COMPACTION_INPUT_CHAR_LIMIT} characters. Preserve continuity from persistent memory and the newest visible context below.`,
+    trimmed,
+  ].join('\n');
 }
 
 /** Wrap the user-supplied event sink so signal-cancel never wedges callers. */

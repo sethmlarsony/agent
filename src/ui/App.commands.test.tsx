@@ -208,6 +208,123 @@ describe('UI slash commands (terminal integration)', () => {
     expect(runSpy).not.toHaveBeenCalled();
   });
 
+  it('/provider asks for a Kimi key instead of reusing another provider key', async () => {
+    mounted = renderApp({
+      readConfig: () => ({
+        backend: 'groq',
+        baseURL: 'https://api.groq.com/openai/v1',
+        apiKey: 'gsk-existing',
+        model: 'openai/gpt-oss-20b',
+      }),
+    });
+    await tick();
+    await submit(mounted.stdin, '/provider');
+
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\r');
+    await tick();
+
+    expect(mounted.lastFrame()).toContain('Kimi API');
+    mounted.stdin.write('sk-kimi-fresh');
+    await tick();
+    mounted.stdin.write('\r');
+    await tick();
+
+    expect(listModels).toHaveBeenCalledWith('kimi', 'https://api.moonshot.ai/v1', 'sk-kimi-fresh');
+  });
+
+  it('/provider can collect and test a Groq API key before model selection', async () => {
+    mounted = renderApp({
+      readConfig: () => ({ backend: 'ollama', baseURL: '', apiKey: '', model: 'stub-model' }),
+    });
+    await tick();
+    await submit(mounted.stdin, '/provider');
+
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\r');
+    await tick();
+
+    expect(mounted.lastFrame()).toContain('Groq API');
+    mounted.stdin.write('gsk-groq-test');
+    await tick();
+    mounted.stdin.write('\r');
+    await tick();
+
+    expect(listModels).toHaveBeenCalledWith(
+      'groq',
+      'https://api.groq.com/openai/v1',
+      'gsk-groq-test',
+    );
+    expect(mounted.lastFrame()).toContain('Select model for Groq');
+
+    mounted.stdin.write('\r');
+    await tick();
+    expect(applyProvider).toHaveBeenCalledWith({
+      backend: 'groq',
+      model: 'qwen2.5-coder:14b',
+      baseURL: 'https://api.groq.com/openai/v1',
+      apiKey: 'gsk-groq-test',
+    });
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it('/provider can collect a Gemini API key and tags cheap models', async () => {
+    vi.mocked(listModels).mockResolvedValueOnce([
+      'models/gemini-3.5-flash',
+      'models/gemini-flash-lite-latest',
+    ]);
+    mounted = renderApp({
+      readConfig: () => ({ backend: 'ollama', baseURL: '', apiKey: '', model: 'stub-model' }),
+    });
+    await tick();
+    await submit(mounted.stdin, '/provider');
+
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\r');
+    await tick();
+
+    expect(mounted.lastFrame()).toContain('Gemini API');
+    mounted.stdin.write('gemini-test');
+    await tick();
+    mounted.stdin.write('\r');
+    await tick();
+
+    expect(listModels).toHaveBeenCalledWith(
+      'gemini',
+      'https://generativelanguage.googleapis.com/v1beta',
+      'gemini-test',
+    );
+    expect(mounted.lastFrame()).toContain('Select model for Gemini');
+    expect(mounted.lastFrame()).toContain('cheap cost');
+
+    mounted.stdin.write('\x1B[B');
+    await tick();
+    mounted.stdin.write('\r');
+    await tick();
+    expect(applyProvider).toHaveBeenCalledWith({
+      backend: 'gemini',
+      model: 'models/gemini-flash-lite-latest',
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+      apiKey: 'gemini-test',
+    });
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
   it('/model list opens an interactive picker and switches on Enter', async () => {
     mounted = renderApp();
     await tick();

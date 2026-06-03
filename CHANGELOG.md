@@ -12,8 +12,17 @@ security engineers, professional penetration testers, and bug hunters.
 ### Added
 
 - **Kimi provider support** — first-class `kimi` backend, default Moonshot API
-  settings, model listing, secret API-key prompt in the provider picker, and
-  Kimi-compatible request shaping.
+  settings, provider-scoped model listing, secret API-key prompt in the
+  provider picker, and Kimi-compatible request shaping.
+- **Groq provider support** — first-class `groq` backend, default Groq
+  OpenAI-compatible endpoint, `GROQ_API_KEY` loading, model listing, and
+  secret API-key prompt in the provider picker. Groq sessions use a compact
+  system prompt and lower auto-compaction threshold to avoid on-demand TPM 413
+  errors during long assessments.
+- **Gemini provider support** — first-class `gemini` backend, native
+  `generateContent` tool-call integration, `GEMINI_API_KEY` loading,
+  interactive API-key setup, recommended PentesterFlow-fit model ordering, and
+  `cheap cost` tags for low-cost Gemini models in the picker.
 - **Burp bridge runtime** — `pentesterflow --burp [port]`, `/burp [port]`, Burp
   task ingestion, issue import endpoints, and Browser Capture tools for reading
   queued Burp requests and confirmed issues from the CLI session.

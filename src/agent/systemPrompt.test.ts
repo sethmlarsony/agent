@@ -134,6 +134,25 @@ describe('buildSystemPrompt', () => {
     expect(p).not.toContain('Tooling profile: scanners enabled');
   });
 
+  it('supports a compact profile for small request-budget providers', () => {
+    const full = buildSystemPrompt({
+      skills: new Registry(),
+      thinkingEnabled: false,
+      target: null,
+    });
+    const compact = buildSystemPrompt({
+      skills: new Registry(),
+      thinkingEnabled: false,
+      target: null,
+      promptProfile: 'compact',
+    });
+    expect(compact).toContain('Human-in-the-Loop Agentic AI CLI assistant');
+    expect(compact).toContain('OWASP API Top 10');
+    expect(compact).toContain('Bugcrowd VRT-style severity');
+    expect(compact).not.toContain('Creative hunter mindset');
+    expect(compact.length).toBeLessThan(full.length / 3);
+  });
+
   it('carries the creative hunter mindset section with all subheadings', () => {
     // These markers are load-bearing for the model's behavior on
     // engagements — chain thinking, quiet wins, tech-stack hot spots,

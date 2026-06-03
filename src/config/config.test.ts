@@ -34,16 +34,16 @@ describe('config', () => {
 
   it('round-trips through save and load', async () => {
     const cfg = defaultConfig();
-    cfg.backend = 'kimi';
-    cfg.model = 'kimi-k2.6';
-    cfg.base_url = 'https://api.moonshot.ai/v1';
+    cfg.backend = 'groq';
+    cfg.model = 'openai/gpt-oss-20b';
+    cfg.base_url = 'https://api.groq.com/openai/v1';
     cfg.api_key = 'sk-test';
     cfg.mcp_servers = [{ name: 'browser', command: 'npx', args: ['-y', '@browsermcp/mcp@latest'] }];
     await save(cfg);
     const reloaded = load();
-    expect(reloaded.backend).toBe('kimi');
-    expect(reloaded.model).toBe('kimi-k2.6');
-    expect(reloaded.base_url).toBe('https://api.moonshot.ai/v1');
+    expect(reloaded.backend).toBe('groq');
+    expect(reloaded.model).toBe('openai/gpt-oss-20b');
+    expect(reloaded.base_url).toBe('https://api.groq.com/openai/v1');
     expect(reloaded.api_key).toBe('sk-test');
     expect(reloaded.mcp_servers[0]?.command).toBe('npx');
   });
@@ -75,6 +75,17 @@ describe('config', () => {
     await save(cfg);
     const reloaded = load();
     expect(reloaded.tooling_profile).toBe('full');
+  });
+
+  it('accepts Gemini as a backend', async () => {
+    const cfg = defaultConfig();
+    cfg.backend = 'gemini';
+    cfg.model = 'models/gemini-3.5-flash';
+    cfg.api_key = 'gemini-test';
+    await save(cfg);
+    const reloaded = load();
+    expect(reloaded.backend).toBe('gemini');
+    expect(reloaded.model).toBe('models/gemini-3.5-flash');
   });
 
   it('leaves tooling_profile undefined when never set (signals first run)', () => {

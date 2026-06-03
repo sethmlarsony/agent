@@ -32,4 +32,12 @@ describe('modelReliabilityWarning', () => {
   it('treats Kimi as a hosted provider for size warnings', () => {
     expect(modelReliabilityWarning('kimi', 'llama-3.1-8b')).toContain('70b+');
   });
+
+  it('treats Groq as a hosted provider for size warnings', () => {
+    expect(modelReliabilityWarning('groq', 'openai/gpt-oss-20b')).toContain('70b+');
+  });
+
+  it('treats Gemini as a hosted provider for size warnings', () => {
+    expect(modelReliabilityWarning('gemini', 'gemma-4-26b-a4b-it')).toContain('70b+');
+  });
 });

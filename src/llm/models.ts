@@ -1,9 +1,16 @@
 // Fetch the list of available models from an LLM backend. Used by the
 // interactive /provider flow to populate the model picker after the user
-// chooses Ollama / LM Studio / openai-compat / Kimi.
+// chooses Ollama / LM Studio / openai-compat / Kimi / Groq / Gemini.
 
 import type { Backend } from '../config/config.js';
-import { KIMI_DEFAULT_BASE_URL } from './providers.js';
+import {
+  GEMINI_DEFAULT_BASE_URL,
+  GEMINI_RECOMMENDED_MODELS,
+  GROQ_DEFAULT_BASE_URL,
+  GROQ_MODELS,
+  KIMI_DEFAULT_BASE_URL,
+  KIMI_MODELS,
+} from './providers.js';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 
@@ -12,6 +19,8 @@ const DEFAULT_BASE_URL: Record<Exclude<Backend, ''>, string> = {
   lmstudio: 'http://localhost:1234/v1',
   'openai-compat': '',
   kimi: KIMI_DEFAULT_BASE_URL,
+  groq: GROQ_DEFAULT_BASE_URL,
+  gemini: GEMINI_DEFAULT_BASE_URL,
 };
 
 /**
@@ -23,6 +32,8 @@ const DEFAULT_BASE_URL: Record<Exclude<Backend, ''>, string> = {
  *   lmstudio      → GET <base>/models    → { data:   [{ id   }] }
  *   openai-compat → GET <base>/models    → same as lmstudio (Bearer header)
  *   kimi          → GET <base>/models    → same as openai-compat (Bearer header)
+ *   groq          → GET <base>/models    → same as openai-compat (Bearer header)
+ *   gemini        → GET <base>/models?key=... → { models: [{ name }] }
  */
 export async function listModels(
   backend: Backend,
@@ -34,9 +45,9 @@ export async function listModels(
   const base = baseURL || DEFAULT_BASE_URL[b];
   if (!base) throw new Error(`${b} backend requires a base URL`);
 
-  const path = b === 'ollama' ? '/api/tags' : '/models';
+  const path = b === 'ollama' ? '/api/tags' : b === 'gemini' ? '/models' : '/models';
   const headers: Record<string, string> = {};
-  if (apiKey && b !== 'ollama') {
+  if (apiKey && b !== 'ollama' && b !== 'gemini') {
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
@@ -47,7 +58,12 @@ export async function listModels(
   const timer = setTimeout(() => ctl.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
-    const resp = await fetch(`${base}${path}`, { method: 'GET', headers, signal: ctl.signal });
+    const suffix = b === 'gemini' ? `?key=${encodeURIComponent(apiKey)}` : '';
+    const resp = await fetch(`${base}${path}${suffix}`, {
+      method: 'GET',
+      headers,
+      signal: ctl.signal,
+    });
     if (resp.status !== 200) {
       throw new Error(`${b} list-models returned ${resp.status}`);
     }
@@ -67,8 +83,53 @@ function parseModels(backend: Exclude<Backend, ''>, body: unknown): string[] {
       .map((m) => (typeof m.name === 'string' ? m.name : ''))
       .filter((n): n is string => n.length > 0);
   }
+  if (backend === 'gemini') {
+    const models =
+      (body as { models?: Array<{ name?: unknown; supportedGenerationMethods?: unknown }> })
+        .models ?? [];
+    const names = models
+      .filter((m) => {
+        const methods = Array.isArray(m.supportedGenerationMethods)
+          ? m.supportedGenerationMethods
+          : [];
+        return methods.includes('generateContent');
+      })
+      .map((m) => (typeof m.name === 'string' ? m.name : ''))
+      .filter((n): n is string => n.length > 0);
+    return preferGeminiRecommended(names);
+  }
   const data = (body as { data?: Array<{ id?: unknown }> }).data ?? [];
-  return data
+  const ids = data
     .map((m) => (typeof m.id === 'string' ? m.id : ''))
     .filter((n): n is string => n.length > 0);
+  if (backend === 'kimi') return preferKnownModels(ids, KIMI_MODELS);
+  if (backend === 'groq') return preferKnownModels(ids, GROQ_MODELS);
+  return ids;
+}
+
+function preferGeminiRecommended(models: string[]): string[] {
+  return preferKnownModels(models, GEMINI_RECOMMENDED_MODELS, { appendUnknown: true });
+}
+
+function preferKnownModels(
+  models: string[],
+  known: readonly string[],
+  opts: { appendUnknown?: boolean } = {},
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of known) {
+    if (models.includes(m) && !seen.has(m)) {
+      out.push(m);
+      seen.add(m);
+    }
+  }
+  if (!opts.appendUnknown) return out;
+  for (const m of models) {
+    if (!seen.has(m)) {
+      out.push(m);
+      seen.add(m);
+    }
+  }
+  return out;
 }

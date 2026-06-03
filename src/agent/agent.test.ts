@@ -161,6 +161,27 @@ describe('Agent.run', () => {
     expect(client.requests[0]?.tools).toBeUndefined();
   });
 
+  it('can switch to a compact system prompt profile before the next request', async () => {
+    const { agent, client } = makeAgentWithClient([
+      {
+        message: { role: 'assistant', content: 'ok' },
+        finishReason: 'stop',
+      },
+    ]);
+    const fullPrompt = agent.getHistory()[0]?.content ?? '';
+    expect(fullPrompt).toContain('Creative hunter mindset');
+
+    agent.setPromptProfile('compact');
+    const compactPrompt = agent.getHistory()[0]?.content ?? '';
+    expect(compactPrompt).toContain('Human-in-the-Loop Agentic AI CLI assistant');
+    expect(compactPrompt).not.toContain('Creative hunter mindset');
+    expect(compactPrompt.length).toBeLessThan(fullPrompt.length / 3);
+
+    const { sink } = collect();
+    await agent.run('hello', new AbortController().signal, sink, { tools: false });
+    expect(client.requests[0]?.messages[0]?.content).toBe(compactPrompt);
+  });
+
   it('does not execute returned tool calls when tools are disabled', async () => {
     const { agent, tool } = makeAgentWithClient([
       {
@@ -350,6 +371,28 @@ describe('Agent.run', () => {
     expect(memory).toContain('Confirmed IDOR');
     expect(memory).toContain('USER_A_TOKEN');
     expect(agent.getMemoryStats().items).toBeGreaterThan(0);
+  });
+
+  it('bounds oversized compaction input so small-TPM providers can recover', async () => {
+    const huge = `older context ${'x'.repeat(100_000)}`;
+    const { agent, client } = makeAgentWithClient([
+      {
+        message: { role: 'assistant', content: huge },
+        finishReason: 'stop',
+      },
+      {
+        message: { role: 'assistant', content: '## Current objective\n- keep going' },
+        finishReason: 'stop',
+      },
+    ]);
+    const { sink } = collect();
+    await agent.run('start', new AbortController().signal, sink);
+    await agent.compact(new AbortController().signal, sink);
+
+    const compactReq = client.requests[1];
+    const compactText = compactReq?.messages[1]?.content ?? '';
+    expect(compactText.length).toBeLessThan(23_000);
+    expect(compactText).toContain('Older conversation text was omitted');
   });
 
   it('circuit-breaker stops retrying auto-compact after 3 failures', async () => {

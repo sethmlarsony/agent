@@ -36,7 +36,40 @@ beforeAll(async () => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          data: [{ id: 'qwen-coder-32b-instruct' }, { id: 'gpt-4o-mini' }, { id: 'kimi-k2.6' }],
+          data: [
+            { id: 'qwen-coder-32b-instruct' },
+            { id: 'gpt-4o-mini' },
+            { id: 'kimi-k2.6' },
+            { id: 'openai/gpt-oss-120b' },
+            { id: 'openai/gpt-oss-20b' },
+            { id: 'llama-3.3-70b-versatile' },
+          ],
+        }),
+      );
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/gemini/models?key=gemini-key') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          models: [
+            {
+              name: 'models/other',
+              supportedGenerationMethods: ['generateContent'],
+            },
+            {
+              name: 'models/gemini-3.5-flash',
+              supportedGenerationMethods: ['generateContent'],
+            },
+            {
+              name: 'models/gemini-flash-lite-latest',
+              supportedGenerationMethods: ['generateContent'],
+            },
+            {
+              name: 'models/gemini-embedding-001',
+              supportedGenerationMethods: ['embedContent'],
+            },
+          ],
         }),
       );
       return;
@@ -65,17 +98,42 @@ describe('listModels', () => {
 
   it('parses LM Studio (openai-compat) /v1/models', async () => {
     const models = await listModels('lmstudio', `http://127.0.0.1:${port}/v1`);
-    expect(models).toEqual(['qwen-coder-32b-instruct', 'gpt-4o-mini', 'kimi-k2.6']);
+    expect(models).toEqual([
+      'qwen-coder-32b-instruct',
+      'gpt-4o-mini',
+      'kimi-k2.6',
+      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
+      'llama-3.3-70b-versatile',
+    ]);
   });
 
   it('parses openai-compat /v1/models with bearer auth', async () => {
     const models = await listModels('openai-compat', `http://127.0.0.1:${port}/v1`, 'sk-fake');
-    expect(models.length).toBe(3);
+    expect(models.length).toBe(6);
   });
 
   it('parses Kimi /v1/models with bearer auth', async () => {
     const models = await listModels('kimi', `http://127.0.0.1:${port}/v1`, 'sk-kimi');
-    expect(models).toContain('kimi-k2.6');
+    expect(models).toEqual(['kimi-k2.6']);
+  });
+
+  it('parses Groq /openai/v1/models with bearer auth', async () => {
+    const models = await listModels('groq', `http://127.0.0.1:${port}/v1`, 'gsk-fake');
+    expect(models).toEqual([
+      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
+      'llama-3.3-70b-versatile',
+    ]);
+  });
+
+  it('parses Gemini models and sorts PentesterFlow recommendations first', async () => {
+    const models = await listModels('gemini', `http://127.0.0.1:${port}/gemini`, 'gemini-key');
+    expect(models).toEqual([
+      'models/gemini-3.5-flash',
+      'models/gemini-flash-lite-latest',
+      'models/other',
+    ]);
   });
 
   it('throws on non-200', async () => {

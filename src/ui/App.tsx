@@ -12,7 +12,15 @@ import { type AgentEvent, MaxStepsError } from '../agent/events.js';
 import { findActiveMention, listMentionDir, parseMentionPath } from '../agent/mentions.js';
 import type { Backend } from '../config/config.js';
 import { listModels } from '../llm/models.js';
-import { KIMI_DEFAULT_BASE_URL } from '../llm/providers.js';
+import {
+  GEMINI_CHEAP_MODELS,
+  GEMINI_DEFAULT_BASE_URL,
+  GEMINI_RECOMMENDED_MODELS,
+  GROQ_DEFAULT_BASE_URL,
+  GROQ_MODELS,
+  KIMI_DEFAULT_BASE_URL,
+  KIMI_MODELS,
+} from '../llm/providers.js';
 import type { SessionDebugLog } from '../logger/sessionDebug.js';
 import { renderSkillTemplate } from '../skills/template.js';
 import { runSelfUpdate } from '../update/selfUpdate.js';
@@ -1153,6 +1161,10 @@ function backendLabel(backend: Backend): string {
       return 'OpenAI-compatible';
     case 'kimi':
       return 'Kimi';
+    case 'groq':
+      return 'Groq';
+    case 'gemini':
+      return 'Gemini';
   }
 }
 
@@ -1479,6 +1491,8 @@ function openProviderPicker(
   const labelLM = `LM Studio${cur.backend === 'lmstudio' ? ' (current)' : ''}`;
   const labelOAI = `OpenAI-compatible${cur.backend === 'openai-compat' ? ' (current)' : ''}`;
   const labelKimi = `Kimi${cur.backend === 'kimi' ? ' (current)' : ''}`;
+  const labelGroq = `Groq${cur.backend === 'groq' ? ' (current)' : ''}`;
+  const labelGemini = `Gemini${cur.backend === 'gemini' ? ' (current)' : ''}`;
 
   const req: AskRequest = {
     question: {
@@ -1490,6 +1504,14 @@ function openProviderPicker(
         {
           label: labelKimi,
           description: 'remote — api.moonshot.ai OpenAI-compatible API',
+        },
+        {
+          label: labelGroq,
+          description: 'remote — api.groq.com OpenAI-compatible Chat API',
+        },
+        {
+          label: labelGemini,
+          description: 'remote — Gemini API with native tool calls',
         },
         {
           label: labelOAI,
@@ -1505,7 +1527,11 @@ function openProviderPicker(
           ? 'lmstudio'
           : picked.startsWith('Kimi')
             ? 'kimi'
-            : 'openai-compat';
+            : picked.startsWith('Groq')
+              ? 'groq'
+              : picked.startsWith('Gemini')
+                ? 'gemini'
+                : 'openai-compat';
       const config = readConfig();
       // For openai-compat we need URL + key already in config.
       if (backend === 'openai-compat' && (!config.baseURL || !config.apiKey)) {
@@ -1520,7 +1546,7 @@ function openProviderPicker(
         });
         return;
       }
-      if (backend === 'kimi' && !config.apiKey) {
+      if (backend === 'kimi' && (config.backend !== 'kimi' || !config.apiKey)) {
         void promptSecret({
           header: 'Kimi API',
           question: 'Enter Kimi API key (MOONSHOT_API_KEY)',
@@ -1536,7 +1562,9 @@ function openProviderPicker(
             }
             void fetchAndPickModel(
               backend,
-              config.baseURL || KIMI_DEFAULT_BASE_URL,
+              config.backend === 'kimi'
+                ? config.baseURL || KIMI_DEFAULT_BASE_URL
+                : KIMI_DEFAULT_BASE_URL,
               apiKey,
               dispatch,
               applyProvider,
@@ -1551,13 +1579,85 @@ function openProviderPicker(
           });
         return;
       }
+      if (backend === 'groq' && (config.backend !== 'groq' || !config.apiKey)) {
+        void promptSecret({
+          header: 'Groq API',
+          question: 'Enter Groq API key (GROQ_API_KEY)',
+          placeholder: 'gsk_...',
+        })
+          .then((apiKey) => {
+            if (!apiKey) {
+              dispatch({
+                type: 'append',
+                entry: { kind: 'error', text: 'Groq API key cannot be empty.' },
+              });
+              return;
+            }
+            void fetchAndPickModel(
+              backend,
+              GROQ_DEFAULT_BASE_URL,
+              apiKey,
+              dispatch,
+              applyProvider,
+              { successText: (picked) => `provider set to Groq · model ${picked}` },
+            );
+          })
+          .catch(() => {
+            dispatch({
+              type: 'append',
+              entry: { kind: 'system', text: 'Groq setup cancelled.' },
+            });
+          });
+        return;
+      }
+      if (backend === 'gemini' && (config.backend !== 'gemini' || !config.apiKey)) {
+        void promptSecret({
+          header: 'Gemini API',
+          question: 'Enter Gemini API key (GEMINI_API_KEY)',
+          placeholder: 'AIza...',
+        })
+          .then((apiKey) => {
+            if (!apiKey) {
+              dispatch({
+                type: 'append',
+                entry: { kind: 'error', text: 'Gemini API key cannot be empty.' },
+              });
+              return;
+            }
+            void fetchAndPickModel(
+              backend,
+              GEMINI_DEFAULT_BASE_URL,
+              apiKey,
+              dispatch,
+              applyProvider,
+              { successText: (picked) => `provider set to Gemini · model ${picked}` },
+            );
+          })
+          .catch(() => {
+            dispatch({
+              type: 'append',
+              entry: { kind: 'system', text: 'Gemini setup cancelled.' },
+            });
+          });
+        return;
+      }
       const baseURL =
         backend === 'openai-compat'
           ? config.baseURL
           : backend === 'kimi'
-            ? config.baseURL || KIMI_DEFAULT_BASE_URL
-            : '';
-      const apiKey = backend === 'openai-compat' || backend === 'kimi' ? config.apiKey : '';
+            ? config.backend === 'kimi'
+              ? config.baseURL || KIMI_DEFAULT_BASE_URL
+              : KIMI_DEFAULT_BASE_URL
+            : backend === 'groq'
+              ? config.backend === 'groq'
+                ? config.baseURL || GROQ_DEFAULT_BASE_URL
+                : GROQ_DEFAULT_BASE_URL
+              : backend === 'gemini'
+                ? config.backend === 'gemini'
+                  ? config.baseURL || GEMINI_DEFAULT_BASE_URL
+                  : GEMINI_DEFAULT_BASE_URL
+                : '';
+      const apiKey = backend === 'openai-compat' || config.backend === backend ? config.apiKey : '';
       void fetchAndPickModel(backend, baseURL, apiKey, dispatch, applyProvider);
     },
     reject: () => dispatch({ type: 'set-ask', req: null }),
@@ -1642,7 +1742,7 @@ async function fetchAndPickModel(
       question: `Select model for ${backendLabel(backend)}${overflow > 0 ? `  (showing ${shown.length} of ${allModels.length} — use /model <id> for unlisted)` : ''}:`,
       options: shown.map((m) => ({
         label: m,
-        description: currentModel && m === currentModel ? 'current / used before' : undefined,
+        description: modelDescription(backend, m, currentModel),
       })),
     },
     resolve: (picked) => {
@@ -1667,4 +1767,20 @@ async function fetchAndPickModel(
     reject: () => dispatch({ type: 'set-ask', req: null }),
   };
   dispatch({ type: 'set-ask', req });
+}
+
+function modelDescription(
+  backend: Backend,
+  model: string,
+  currentModel: string | undefined,
+): string | undefined {
+  const parts: string[] = [];
+  if (currentModel && model === currentModel) parts.push('current / used before');
+  if (backend === 'kimi' && KIMI_MODELS.includes(model)) parts.push('Kimi/Moonshot');
+  if (backend === 'groq' && GROQ_MODELS.includes(model)) parts.push('Groq');
+  if (backend === 'gemini') {
+    if (GEMINI_CHEAP_MODELS.includes(model)) parts.push('cheap cost');
+    else if (GEMINI_RECOMMENDED_MODELS.includes(model)) parts.push('best fit');
+  }
+  return parts.length > 0 ? parts.join(' · ') : undefined;
 }
