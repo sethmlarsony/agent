@@ -11,6 +11,9 @@ security engineers, professional penetration testers, and bug hunters.
 
 ### Added
 
+- **Baseline x64 release binaries** — x64 standalone binaries are now built
+  with Bun's baseline runtime so older x86_64 CPUs without AVX2 do not crash
+  with `Illegal instruction` on startup.
 - **Continuous learning intelligence** — local project and personal knowledge
   bases store redacted lessons from completed turns and compactions, including
   user preferences, decisions, proven workflows, mistakes, tool/config patterns,

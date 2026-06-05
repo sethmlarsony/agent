@@ -123,6 +123,9 @@ Download binaries directly from
 | Linux | `pentesterflow-linux-arm64`, `pentesterflow-linux-x64` |
 | Windows | `pentesterflow-windows-x64.exe` |
 
+The x64 standalone binaries are built with Bun's baseline runtime for older
+x86_64 CPUs. They do not require AVX2.
+
 ## Quickstart
 
 ```sh
