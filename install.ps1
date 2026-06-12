@@ -80,13 +80,26 @@ try {
     } catch {
       throw "could not download SHA256SUMS from $base - refusing to install an unverified binary (set `$env:PENTESTERFLOW_SKIP_CHECKSUM='1' to override): $($_.Exception.Message)"
     }
-    $line = $sums -split "`n" |
-      Where-Object { $_ -match "\s$([regex]::Escape($asset))\s*$" } |
-      Select-Object -First 1
-    if (-not $line) {
-      throw "SHA256SUMS does not list $asset - refusing to install an unverified binary"
+    # Parse SHA256SUMS by exact filename. Each line is "<hex>  <name>"
+    # (coreutils text mode) or "<hex> *<name>" (binary mode). Match the
+    # filename field exactly rather than with a trailing-anchored regex:
+    # the old `\s$asset\s*$` pattern was fragile against CRLF line endings
+    # and the binary-mode '*' marker, which could reject a valid SHA256SUMS
+    # and abort the install (#14).
+    $want = $null
+    foreach ($raw in ($sums -split "`r?`n")) {
+      if ($raw.Trim() -notmatch '^([0-9A-Fa-f]{64})\s+\*?(.+)$') { continue }
+      if ($matches[2].Trim() -eq $asset) {
+        $want = $matches[1].ToLower()
+        break
+      }
     }
-    $want = ($line -replace '\s.*$', '').Trim().ToLower()
+    if (-not $want) {
+      $listed = (($sums -split "`r?`n") |
+        ForEach-Object { if ($_ -match '^[0-9A-Fa-f]{64}\s+\*?(.+)$') { $matches[1].Trim() } } |
+        Where-Object { $_ }) -join ', '
+      throw "SHA256SUMS does not list $asset - refusing to install an unverified binary (listed: $listed). Set `$env:PENTESTERFLOW_SKIP_CHECKSUM='1' to override."
+    }
     $got  = (Get-FileHash -Algorithm SHA256 -Path $download).Hash.ToLower()
     if ($got -ne $want) {
       throw "checksum mismatch for $asset (expected $want, got $got)"

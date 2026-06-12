@@ -169,6 +169,31 @@ jobs:
           cat ./*.sha256 > SHA256SUMS
           rm -f ./*.sha256
           echo "Release assets:" && ls -la
+      # Never publish a partial / out-of-sync release: every expected binary
+      # must be present AND listed in SHA256SUMS before we cut the release.
+      # A missing windows entry here is exactly what broke installs in #14.
+      - name: Verify release assets are complete and consistent
+        run: |
+          set -euo pipefail
+          cd dist-bin
+          expected=(
+            pentesterflow-darwin-arm64
+            pentesterflow-darwin-x64
+            pentesterflow-linux-x64
+            pentesterflow-linux-arm64
+            pentesterflow-windows-x64.exe
+          )
+          test -s SHA256SUMS || { echo "::error::SHA256SUMS is missing or empty"; exit 1; }
+          fail=0
+          for a in "${expected[@]}"; do
+            if [[ ! -s "$a" ]]; then
+              echo "::error::release asset missing or empty: $a"; fail=1
+            fi
+            if ! awk -v a="$a" '$2==a{found=1} END{exit !found}' SHA256SUMS; then
+              echo "::error::SHA256SUMS does not list $a"; fail=1
+            fi
+          done
+          exit "$fail"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.release_tag }}
